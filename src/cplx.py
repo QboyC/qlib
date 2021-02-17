@@ -10,17 +10,35 @@ class cnum:
     self.real = real
     self.imag = imag
   
+  # Modulus (Euclidean norm)
+  def mod(self) -> float:
+    return (self.real**2 + self.imag**2)**0.5
+  
   # String representation
-  def to_string(self) -> AnyStr:
-    if self.imag < 0:
-      op = '-'
-    else:
-      op = '+'
-    return str(self.real) + op + str(abs(self.imag)) + 'i'
+  def to_string(self, rem0 : bool = True, condensed : bool = False) -> AnyStr:
+    real = str(self.real)
+    imag = str(self.imag) + 'i'
+    if rem0:
+      if not self.real and not self.imag:
+        return '0'
+      if not self.real:
+        real = ''
+      if not self.imag:
+        imag = ''
+    op = ''
+    if real and imag:
+      if self.imag < 0:
+        op = '-'
+        imag = imag[1:]
+      else:
+        op = '+'
+      if not condensed:
+        op = ' ' + op + ' '
+    return real + op + imag
 
   # Print string representation
-  def display(self) -> None:
-    print(self.to_string())
+  def display(self, rem0 : bool = True, condensed : bool = False) -> None:
+    print(self.to_string(rem0, condensed))
 
 # Conjugate
 def conj(c : cnum) -> cnum:
@@ -67,18 +85,18 @@ class cmat:
     return self
 
   # Print string representation
-  def display(self) -> None:
+  def display(self, rem0 : bool = True, condensed : bool = False) -> None:
     sizes = []
     for col in [*zip(*self.array)]:
-      sizes.append(len(max(col, key=lambda c : len(c.to_string())).to_string()))
+      sizes.append(len(max(col, key=lambda c : len(c.to_string(rem0, condensed))).to_string(rem0, condensed)))
     for row in self.array:
       line = '['
       for i in range(len(row)):
-        num = row[i].to_string()
+        num = row[i].to_string(rem0, condensed)
         size = len(num) 
         tail = sizes[i] - size
-        line += num + ' ' * tail + ','
-      print(line[:-1] + ']')
+        line += num + ' ' * tail + ',' + ' ' * (not condensed)
+      print(line[:-1 - (1 * (not condensed))] + ']')
 
 # Complex Matrix Multiplication
 def cmatmult(cm1 : cmat, cm2 : cmat) -> cmat:
