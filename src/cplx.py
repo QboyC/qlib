@@ -4,6 +4,9 @@ from typing import AnyStr, Dict, Tuple
 
 import math
 
+# Decimal precision
+PRECISION = 8
+
 # Complex number
 class cnum:
   def __init__(self, real : float, imag : float = 0):
@@ -11,9 +14,40 @@ class cnum:
     self.imag = imag
   
   # Modulus (Euclidean norm)
-  def mod(self) -> float:
-    return (self.real**2 + self.imag**2)**0.5
-  
+  def __abs__(self) -> float:
+    return round((self.real**2 + self.imag**2)**0.5, PRECISION)
+
+  # Complex Conjugate
+  def __invert__(self):
+    return cnum(self.real, -self.imag)
+
+  # Complex Multiplication
+  def __mul__(self, c : cnum) -> cnum:
+    r1 = self.real
+    i1 = self.imag
+    r2 = c.real
+    i2 = c.imag
+    return cnum(round(r1 * r2 - i1 * i2, PRECISION), 
+                round(i1 * r2 + r1 * i2, PRECISION))
+ 
+  # Complex Addition
+  def __add__(self, c : cnum) -> cnum:
+    r1 = self.real
+    i1 = self.imag
+    r2 = c.real
+    i2 = c.imag
+    return cnum(r1 + r2, i1 + i2)
+
+  # Scalar times Complex Matrix
+  def __rshift__(self, cm : cmat) -> cmat:
+    rows = cm.rows
+    cols = cm.cols
+    entries = {}
+    for r in range(len(cm.array)):
+      for c in range(len(cm.array[r])):
+        entries[(r, c)] = cm.array[r][c] * self
+    return cmat(rows, cols, entries)
+
   # String representation
   def to_string(self, rem0 : bool = True, condensed : bool = False) -> AnyStr:
     real = str(self.real)
@@ -25,6 +59,10 @@ class cnum:
         real = ''
       if not self.imag:
         imag = ''
+      elif self.imag == 1:
+        imag = 'i'
+      elif self.imag == -1:
+        imag = '-i'
     op = ''
     if real and imag:
       if self.imag < 0:
@@ -40,30 +78,10 @@ class cnum:
   def display(self, rem0 : bool = True, condensed : bool = False) -> None:
     print(self.to_string(rem0, condensed))
 
-# Conjugate
-def conj(c : cnum) -> cnum:
-  return cnum(c.real, -c.imag)
-
-# Complex Multiplication
-def cmult(c1 : cnum, c2 : cnum) -> cnum:
-  a = c1.real
-  b = c1.imag
-  c = c2.real
-  d = c2.imag
-  return cnum(a * c - b * d, b * c + a * d)
-
-# Complex Addition
-def cadd(c1 : cnum, c2 : cnum) -> cnum:
-  a = c1.real
-  b = c1.imag
-  c = c2.real
-  d = c2.imag
-  return cnum(a + c, b + d)
-
 # Complex Exponential (e^ci)
-def cexp(c : float, precision : int = 8):
-  real = round(math.cos(c), precision)
-  imag = round(math.sin(c), precision)
+def cexp(c : float):
+  real = round(math.cos(c), PRECISION)
+  imag = round(math.sin(c), PRECISION)
   return cnum(real, imag)
 
 # Complex Matrix
@@ -76,13 +94,62 @@ class cmat:
       row = key[0]
       col = key[1]
       self.array[row][col] = value
+  
+  # Kronecker Product (Tensor)
+  def __mul__(self, cm : cmat) -> cmat:
+    row1 = self.rows
+    col1 = self.cols
+    row2 = cm.rows
+    col2 = cm.cols
+    rows = row1 * row2
+    cols = col1 * col2
+    entries = {}
+    for r in range(rows):
+      for c in range(cols):
+        key = (r, c)
+        r1 = r // row2
+        c1 = c // col2
+        r2 = r % row2
+        c2 = c % col2
+        e1 = self.array[r1][c1]
+        e2 = cm.array[r2][c2] 
+        entries[key] = e1 * e2
+    return cmat(rows, cols, entries)
+
+  # Complex Matrix Multiplication
+  def __matmul__(self, cm : cmat) -> cmat:
+    shared = self.cols
+    if shared != cm.rows:
+      raise Exception("Matrix multiplication invalid")
+    rows = self.rows
+    cols = cm.cols
+    entries = {}
+    for r in range(rows):
+      for c in range(cols):
+        total = cnum(0, 0)
+        for e in range(shared):
+          total += self.array[r][e] * cm.array[e][c]
+        entries[(r, c)] = total
+    return cmat(rows, cols, entries)
+
+  # Complex Matrix Exponentiation
+  def __pow__(self, exp : int) -> cmat:
+    if exp < 0:
+      raise Exception("Matrix exponent cannot be negative")
+    ans = self
+    for i in range(1, exp):
+      ans @= self
+    return ans
 
   # Scalar times Complex Matrix
-  def smult(self, scalar : cnum) -> cmat:
+  def __lshift__(self, scalar : cnum) -> cmat:
+    rows = self.rows
+    cols = self.cols
+    entries = {}
     for r in range(len(self.array)):
       for c in range(len(self.array[r])):
-        self.array[r][c] = cmult(scalar, self.array[r][c])
-    return self
+        entries[(r, c)] = self.array[r][c] * scalar
+    return cmat(rows, cols, entries)
 
   # Print string representation
   def display(self, rem0 : bool = True, condensed : bool = False) -> None:
@@ -97,40 +164,3 @@ class cmat:
         tail = sizes[i] - size
         line += num + ' ' * tail + ',' + ' ' * (not condensed)
       print(line[:-1 - (1 * (not condensed))] + ']')
-
-# Complex Matrix Multiplication
-def cmatmult(cm1 : cmat, cm2 : cmat) -> cmat:
-  shared = cm1.cols
-  if shared != cm2.rows:
-    raise Exception("Matrix multiplication invalid")
-  rows = cm1.rows
-  cols = cm2.cols
-  entries = {}
-  for r in range(rows):
-    for c in range(cols):
-      total = cnum(0, 0)
-      for e in range(shared):
-        total = cadd(total, cmult(cm1.array[r][e], cm2.array[e][c]))
-      entries[(r, c)] = total
-  return cmat(rows, cols, entries)
-
-# Kronecker Product
-def kronecker(cm1 : cmat, cm2 : cmat) -> cmat:
-  row1 = cm1.rows
-  col1 = cm1.cols
-  row2 = cm2.rows
-  col2 = cm2.cols
-  rows = row1 * row2
-  cols = col1 * col2
-  entries = {}
-  for r in range(rows):
-    for c in range(cols):
-      key = (r, c)
-      r1 = r // row2
-      c1 = c // col2
-      r2 = r % row2
-      c2 = c % col2
-      e1 = cm1.array[r1][c1]
-      e2 = cm2.array[r2][c2] 
-      entries[key] = cmult(e1, e2)
-  return cmat(rows, cols, entries)
